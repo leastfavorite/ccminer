@@ -9,11 +9,22 @@ POWERED_RAIL_SLOT = 3
 TORCH_SLOT = 4
 REDSTONE_TORCH_SLOT = 5
 
+FILLER_BLOCKS = {
+    "minecraft:cobblestone",
+    "minecraft:cobbled_deepslate"
+}
+REFUEL_ITEMS = {
+    "minecraft:coal",
+    "minecraft:charcoal",
+    "minecraft:coal_block"
+}
+
 -- mineshaft options
 DIG_SIZE = 64
 TORCH_SPACING = 4
 POWERED_RAIL_SPACING = 16
 
+-- utility functions
 function crash(message)
     print("turtle crashed :(")
     print(message)
@@ -22,45 +33,43 @@ function crash(message)
     end
 end
 
+function contains(tbl, elem)
+    for _, value in pairs(tbl) do
+        if value == elem then return true end
+    end
+    return false
+end
+
+function select_items(blocks)
+    for i=1,INVENTORY_SIZE do
+        local item =  turtle.getItemDetail(i)
+        if item ~= nil and contains(FILLER_BLOCKS, item.name) then
+            turtle.select(i)
+            return
+        end
+    end
+    crash("could not select required blocks")
+end
+
 -- precondition: turtle must be at end of mineshaft
 --   and at the top space
 function extend(index)
-    -- break new row
-    function get_filler()
-        function predicate()
-            local item = turtle.getItemDetail().name
-            if item == "minecraft:cobblestone" or item == "minecraft:cobbled_deepslate" then
-                return true
-            end
-        end
-        -- just check current item
-        if predicate() then return end
-
-        -- search thru all items
-        for i=1,INVENTORY_SIZE do
-            turtle.select(i)
-            if predicate() then return end
-        end
-
-        crash("out of filler material")
-    end
-
     function dig()
-        turtle.dig()
+        while turtle.dig() do end
         turtle.forward()
         turtle.turnLeft()
         if not turtle.detect() then
-            get_filler() 
+            select_items(FILLER_BLOCKS) 
             turtle.place()
         end
         turtle.turnRight()
         if not turtle.detect() then
-            get_filler() 
+            select_items(FILLER_BLOCKS) 
             turtle.place()
         end
         turtle.turnRight()
         if not turtle.detect() then
-            get_filler() 
+            select_items(FILLER_BLOCKS) 
             turtle.place()
         end
         turtle.turnLeft()
@@ -68,7 +77,7 @@ function extend(index)
 
     dig()
     if not turtle.detectUp() then
-        get_filler() 
+        select_items(FILLER_BLOCKS) 
         turtle.placeUp()
     end
     turtle.back()
@@ -80,13 +89,29 @@ function extend(index)
 
     dig()
     if not turtle.detectDown() then
-        get_filler() 
+        select_items(FILLER_BLOCKS) 
         turtle.placeDown()
     end
-    turtle.back()
-    turtle.down()
-
     -- place rails
+    turtle.back()
+    turtle.up()
+    if index % POWERED_RAIL_SPACING == 0 then
+        turtle.select(POWERED_RAIL_SLOT)
+        turtle.placeDown()
+        turtle.up()
+        turtle.select(REDSTONE_TORCH_SLOT)
+        turtle.placeDown()
+    else
+        turtle.select(RAIL_SLOT)
+        turtle.placeDown()
+        turtle.up()
+        if index % TORCH_SPACING == 0 then
+            turtle.select(TORCH_SLOT)
+            turtle.placeDown()
+        end
+    end
+
+    turtle.forward()
 end
 
 function main()
@@ -94,8 +119,11 @@ function main()
     -- select path
     -- dig some number of chunks
     for i=1,64 do
+        print(i)
         extend(i)
     end
     -- build end state
     -- return 
 end
+
+main()
