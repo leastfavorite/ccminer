@@ -49,16 +49,28 @@ function extend(index)
         turtle.dig()
         turtle.forward()
         turtle.turnLeft()
-        turtle.detect() or (get_filler() and turtle.place())
+        if not turtle.detect() then
+            get_filler() 
+            turtle.place()
+        end
         turtle.turnRight()
-        turtle.detect() or (get_filler() and turtle.place())
+        if not turtle.detect() then
+            get_filler() 
+            turtle.place()
+        end
         turtle.turnRight()
-        turtle.detect() or (get_filler() and turtle.place())
+        if not turtle.detect() then
+            get_filler() 
+            turtle.place()
+        end
         turtle.turnLeft()
     end
 
     dig()
-    turtle.detectUp() or (get_filler() and turtle.placeUp())
+    if not turtle.detectUp() then
+        get_filler() 
+        turtle.placeUp()
+    end
     turtle.back()
     turtle.down()
 
@@ -67,7 +79,10 @@ function extend(index)
     turtle.down()
 
     dig()
-    turtle.detectDown() or (get_filler() and turtle.placeDown())
+    if not turtle.detectDown() then
+        get_filler() 
+        turtle.placeDown()
+    end
     turtle.back()
     turtle.down()
 
