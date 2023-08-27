@@ -8,42 +8,68 @@ UPDATE_FREQUENCY = 16
 LISTEN_CHANNEL = 98
 STATUS_CHANNEL = 97
 
+-- the direction of the turtle relative to the bridge
+BRIDGE_DIRECTION = "west"
+
 -- the blocks this turtle will try to use to fill gaps
 FILLER_BLOCKS = {
     "minecraft:cobblestone",
     "minecraft:cobbled_deepslate"
 }
 
+-- the items this turtle will attempt to use for fuel
+FUEL = "minecraft:charcoal"
+FUEL_AMT = 80 -- one piece of charcoal provides 80 fuel
+
+-- the blocks the turtle will use for locating
+HOME_BLOCK = "createdeco:yellow_brass_lamp"
+SHAFT_BLOCK = "createdeco:red_brass_lamp"
+
+-- desired inventory before leaving
+INVENTORY = {
+    modem = {
+        id = "computercraft:wireless_modem_advanced",
+        slot = 1,
+        count = 1
+    },
+    rail = {
+        id = "minecraft:rail",
+        slot = 2,
+        count = 64
+    },
+    powered_rail = {
+        id = "minecraft:powered_rail",
+        slot = 3,
+        count = 16
+    },
+    torch = {
+        id = "minecraft:torch",
+        slot = 4,
+        count = 64
+    },
+    redstone_torch = {
+        id = "minecraft:redstone_torch",
+        slot = 5,
+        count = 16
+    },
+    iron_bars = {
+        id = "minecraft:iron_bars",
+        slot = 6,
+        count = 64
+    }
+}
+function select(str)
+    turtle.select(INVENTORY[str].slot)
+end
+
 
 -- constants
 INVENTORY_SIZE = 16
-SLOTS = {
-    modem          = 1,
-    rail           = 2,
-    powered_rail   = 3,
-    torch          = 4,
-    redstone_torch = 5,
-    iron_bar       = 6
-}
-IDS = {
-    charcoal = "minecraft:charcoal",
-    rail = "minecraft:rail",
-    powered_rail = "minecraft:powered_rail",
-    torch = "minecraft:torch",
-    redstone_torch = "minecraft:redstone_torch",
-    iron_bar = "minecraft:iron_bar",
-    home = "createdeco:yellow_brass_lamp",
-    shaft = "createdeco:red_brass_lamp",
-    ender_modem = "computercraft:wireless_modem_advanced"
-}
-REFUEL_ITEMS = {
-    "minecraft:coal",
-    "minecraft:charcoal",
-    "minecraft:coal_block"
-}
 
 -- mineshaft options
 DIG_SIZE = 64
+
+-- spacing between blocks in the mineshaft
 TORCH_SPACING = 4
 -- must be a factor of both TORCH and POWERED_RAIL spacings
 IRON_BAR_SPACING = 2
@@ -55,17 +81,17 @@ POWERED_RAIL_SPACING = 16
 -- after completing execution, the old equip is returned.
 -- the function can access the wrapped peripheral as an argument.
 function with_modem(func)
-    local using_pickaxe = turtle.getItemDetail(SLOTS.modem).name == IDS.ender_modem
+    local using_pickaxe = turtle.getItemDetail(INVENTORY.modem.slot).name == INVENTORY.modem.id
     if using_pickaxe then
-        turtle.select(SLOTS.modem)
+        select("modem")
         turtle.equipRight()
     end
 
     func(peripheral.wrap("right"))
 
-    using_pickaxe = turtle.getItemDetail(SLOTS.modem).name == IDS.ender_modem
-    if using_pickaxe then
-        turtle.select(SLOTS.modem)
+    local still_using_pickaxe = turtle.getItemDetail(INVENTORY.modem.slot).name == INVENTORY.modem.id
+    if using_pickaxe ~= still_using_pickaxe then
+        select("modem")
         turtle.equipRight()
     end
 end
@@ -99,19 +125,13 @@ function contains(tbl, elem)
     return false
 end
 
-function until_above(name, func)
-    while (type(turtle.inspectDown()) == string) or
-        (turtle.inspectDown().name ~= name)
-    do
-        func()
-    end
-end
-
 function until_below(name, func)
-    while (type(turtle.inspectUp()) == string) or
-        (turtle.inspectUp().name ~= name)
-    do
+    while true do
         func()
+        local is_block, block = turtle.inspectUp()
+        if is_block and block.name == name then
+            return
+        end
     end
 end
 
@@ -119,7 +139,7 @@ end
 function select_items(blocks)
     for i=1,INVENTORY_SIZE do
         local item =  turtle.getItemDetail(i)
-        if item ~= nil and contains(FILLER_BLOCKS, item.name) then
+        if item ~= nil and contains(blocks, item.name) then
             turtle.select(i)
             return
         end
@@ -130,28 +150,60 @@ end
 -- precondition: turtle must be at end of mineshaft
 --   and at the top space
 function extend(index)
-    function dig()
-        while turtle.dig() do end
+    function dig(gravel, iron_bars)
+        gravel = gravel or false
+        iron_bars = iron_bars or false
+        if gravel then
+            while turtle.dig() do
+                sleep(0.5)
+            end
+        else
+            turtle.dig()
+        end
+
         turtle.forward()
         turtle.turnLeft()
+        if gravel then
+            while turtle.dig() do
+                sleep(0.5)
+            end
+        end
         if not turtle.detect() then
             select_items(FILLER_BLOCKS)
             turtle.place()
         end
+        if (iron_bars) then
+            select("iron_bars")
+            turtle.dig()
+            turtle.place()
+        end
+
         turtle.turnRight()
         if not turtle.detect() then
             select_items(FILLER_BLOCKS)
             turtle.place()
         end
+
         turtle.turnRight()
+        if gravel then
+            while turtle.dig() do
+                sleep(0.5)
+            end
+        end
         if not turtle.detect() then
             select_items(FILLER_BLOCKS)
             turtle.place()
         end
+        if (iron_bars) then
+            select("iron_bars")
+            turtle.dig()
+            turtle.place()
+        end
+
         turtle.turnLeft()
     end
 
-    dig()
+    dig(true)
     if not turtle.detectUp() then
         select_items(FILLER_BLOCKS)
         turtle.placeUp()
@@ -159,7 +211,8 @@ function extend(index)
     turtle.back()
     turtle.down()
 
-    dig()
+    local iron_bars = index % IRON_BAR_SPACING == 0
+    dig(false, iron_bars)
     turtle.back()
     turtle.down()
 
@@ -173,28 +226,17 @@ function extend(index)
     turtle.back()
     turtle.up()
     if index % POWERED_RAIL_SPACING == 0 then
-        turtle.select(SLOTS.powered_rail)
+        select("powered_rail")
         turtle.placeDown()
         turtle.up()
-        turtle.select(SLOTS.redstone_torch)
+        select("redstone_torch")
         turtle.placeDown()
     else
-        turtle.select(SLOTS.rail)
+        select("rail")
         turtle.placeDown()
-        if index % IRON_BAR_SPACING == 1 then
-            turtle.select(SLOTS.iron_bar)
-            turtle.turnLeft()
-            turtle.dig()
-            turtle.place()
-            turtle.turnRight()
-            turtle.turnRight()
-            turtle.dig()
-            turtle.place()
-            turtle.turnLeft()
-        end
         turtle.up()
         if index % TORCH_SPACING == 0 then
-            turtle.select(SLOTS.torch)
+            select("torch")
             turtle.placeDown()
         end
     end
@@ -203,9 +245,79 @@ function extend(index)
 end
 
 function restock()
+    -- remove all items
+    local bridge = peripheral.find("meBridge")
+    if bridge == nil then
+        crash("couldnt find bridge")
+        return
+    end
+
+    for i=2,INVENTORY_SIZE do
+        local detail = turtle.getItemDetail(i)
+        if detail ~= nil then
+            bridge.importItem({name=detail.name}, BRIDGE_DIRECTION)
+        end
+    end
+
     -- get fuel
+    local fuel_required = math.floor((turtle.getFuelLimit() - turtle.getFuelLevel()) / FUEL_AMT)
+    local fuel_filled = 0
+    send_message("refueling")
+    send_progress(0, fuel_required)
+    while fuel_filled < fuel_required do
+        local function get_fuel()
+            return bridge.exportItem({
+                    name=FUEL,
+                    count=math.min(64, (fuel_required - fuel_filled))
+                }, BRIDGE_DIRECTION)
+        end
+        local count = get_fuel()
+        select_items({FUEL})
+        turtle.refuel(count)
+        fuel_filled = fuel_filled + count
+        send_progress(fuel_filled, fuel_required)
+        if fuel_filled < fuel_required then
+            sleep(30)
+        end
+    end
 
     -- get items
+    local function get_item(item, count)
+        send_message("restocking " .. item)
+        send_progress(0, count)
+        local pulled = 0
+        local function pull_items()
+            return bridge.exportItem({
+                    name=item,
+                    count=(count - pulled)
+                }, BRIDGE_DIRECTION)
+        end
+        while pulled < count do
+            pulled = pulled + pull_items()
+            send_progress(pulled, count)
+            if pulled < count then
+                sleep(30)
+            end
+        end
+    end
+
+    local inventory_sorted = {}
+    for _, i in pairs(INVENTORY) do
+        inventory_sorted[i.slot] = i
+    end
+
+    for i=1,#inventory_sorted do
+        local item = inventory_sorted[i]
+        if item.slot ~= 1 then
+            get_item(item.id, item.count)
+        end
+    end
+
+    for _, i in pairs(FILLER_BLOCKS) do
+        if bridge.getItem({name=i}).amount ~= nil then
+            get_item(i, 64)
+        end
+    end
 end
 
 function get_shaft()
@@ -215,10 +327,13 @@ function get_shaft()
         modem.open(LISTEN_CHANNEL)
         send_message("awaiting command")
         while true do
-            local message = os.pullEvent("modem_message").message
-            local success
+            local _, _, _, _, message = os.pullEvent("modem_message")
+            print("recv: "..message)
+            print(string.find(message, "^") ~= nil)
             _, _, shaft, shaft_length =
-                string.find(message, "^"..os.getComputerID().." go to shaft %d of length %d")
+                string.find(message, "^"..os.getComputerID()..": go to shaft (%d+) of length (%d+)")
+            shaft = tonumber(shaft)
+            shaft_length = tonumber(shaft_length)
             if shaft ~= nil then
                 break
             end
@@ -240,7 +355,7 @@ function main()
     send_message("navigating to mineshaft")
     send_progress(0, shaft)
     for i = 1, shaft do
-        until_below(IDS.shaft, function()
+        until_below(SHAFT_BLOCK, function()
             turtle.forward()
         end)
         send_progress(i, shaft)
@@ -268,7 +383,6 @@ function main()
     turtle.down()
     turtle.digDown()
     turtle.up()
-    turtle.back()
 
 
     -- dig some number of chunks
@@ -279,7 +393,7 @@ function main()
 
     -- build end state
     turtle.down()
-    turtle.select(SLOTS.powered_rail)
+    select("powered_rail")
     turtle.placeDown()
     turtle.up()
 
@@ -287,7 +401,7 @@ function main()
     send_message("returning from mineshaft")
     send_progress(0, shaft_length + DIG_SIZE)
     travel_distance = 0
-    until_below(IDS.shaft, function()
+    until_below(SHAFT_BLOCK, function()
         turtle.back()
 
         travel_distance = travel_distance + 1
@@ -295,12 +409,16 @@ function main()
             send_progress(travel_distance, shaft_length + DIG_SIZE)
         end
     end)
-    send_message("shaft" .. shaft .. " has length " .. travel_distance)
+    send_message("shaft " .. shaft .. " has length " .. travel_distance)
 
     -- return home
     turtle.turnRight()
-    until_below(IDS.home, turtle.back)
-
+    until_below(HOME_BLOCK, turtle.back)
+    turtle.turnLeft()
+    send_message("returned")
 end
 
-main()
+-- main()
+while true do
+    main()
+end
