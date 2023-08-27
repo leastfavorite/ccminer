@@ -71,8 +71,9 @@ function with_modem(func)
 end
 
 function send_message(message)
+    print("sending: "..message)
     with_modem(function (modem)
-        modem.transmit(ENDER_CHANNEL, LISTEN_CHANNEL,
+        modem.transmit(STATUS_CHANNEL, LISTEN_CHANNEL,
             os.getComputerID() .. ": " .. message)
     end)
 end
